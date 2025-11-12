@@ -100,19 +100,48 @@ class Transaction {
     const bufferReader = new bufferutils_js_1.BufferReader(buffer);
     const tx = new Transaction();
     tx.version = bufferReader.readUInt32();
+    // keep track of where we are before we try to read the marker
+    const markerPosition = bufferReader.offset;
+    // pull one byte that might be the segwit marker
     const marker = bufferReader.readUInt8();
+    // pull the next byte that might be the segwit flag
     const flag = bufferReader.readUInt8();
+    // we start by assuming there are no witnesses
     let hasWitnesses = false;
+    // we will fill this in only when we are sure about the number of inputs
+    let vinLen;
     if (
       marker === Transaction.ADVANCED_TRANSACTION_MARKER &&
       flag === Transaction.ADVANCED_TRANSACTION_FLAG
     ) {
-      hasWitnesses = true;
+      // read what the stream claims is the count of inputs
+      const potentialVinLen = bufferReader.readVarInt();
+      // find how many bytes are still left in the stream after that read
+      const remainingBytes = BigInt(buffer.length - bufferReader.offset);
+      // each legacy input needs at least 41 bytes in the unsigned tx form
+      const minInputSize = BigInt(41);
+      if (
+        potentialVinLen === BigInt(0) ||
+        remainingBytes < potentialVinLen * minInputSize
+      ) {
+        // if the count is zero or there are not enough bytes, then this was a false alarm
+        bufferReader.offset = markerPosition;
+      } else {
+        // the marker was real, so we remember that witnesses are present
+        hasWitnesses = true;
+        // we also reuse the count we already read
+        vinLen = potentialVinLen;
+      }
     } else {
-      bufferReader.offset -= 2;
+      // marker and flag were not present, so jump back before the read
+      bufferReader.offset = markerPosition;
     }
-    const vinLen = bufferReader.readVarInt();
-    for (let i = 0; i < vinLen; ++i) {
+    if (vinLen === undefined) {
+      // if we have not already read the input count, do it now in the normal way
+      vinLen = bufferReader.readVarInt();
+    }
+    const vinCount = Number(vinLen);
+    for (let i = 0; i < vinCount; ++i) {
       tx.ins.push({
         hash: bufferReader.readSlice(32),
         index: bufferReader.readUInt32(),
@@ -122,14 +151,15 @@ class Transaction {
       });
     }
     const voutLen = bufferReader.readVarInt();
-    for (let i = 0; i < voutLen; ++i) {
+    const voutCount = Number(voutLen);
+    for (let i = 0; i < voutCount; ++i) {
       tx.outs.push({
         value: bufferReader.readInt64(),
         script: bufferReader.readVarSlice(),
       });
     }
     if (hasWitnesses) {
-      for (let i = 0; i < vinLen; ++i) {
+      for (let i = 0; i < vinCount; ++i) {
         tx.ins[i].witness = bufferReader.readVector();
       }
       // was this pointless?
@@ -359,24 +389,26 @@ class Transaction {
         bufferWriter.writeSlice(txIn.hash);
         bufferWriter.writeUInt32(txIn.index);
       });
-      hashPrevouts = (0, sha256_1.sha256)(bufferWriter.end());
+      hashPrevouts = Uint8Array.from((0, sha256_1.sha256)(bufferWriter.end()));
       bufferWriter = bufferutils_js_1.BufferWriter.withCapacity(
         8 * this.ins.length,
       );
       values.forEach(value => bufferWriter.writeInt64(value));
-      hashAmounts = (0, sha256_1.sha256)(bufferWriter.end());
+      hashAmounts = Uint8Array.from((0, sha256_1.sha256)(bufferWriter.end()));
       bufferWriter = bufferutils_js_1.BufferWriter.withCapacity(
         prevOutScripts.map(varSliceSize).reduce((a, b) => a + b),
       );
       prevOutScripts.forEach(prevOutScript =>
         bufferWriter.writeVarSlice(prevOutScript),
       );
-      hashScriptPubKeys = (0, sha256_1.sha256)(bufferWriter.end());
+      hashScriptPubKeys = Uint8Array.from(
+        (0, sha256_1.sha256)(bufferWriter.end()),
+      );
       bufferWriter = bufferutils_js_1.BufferWriter.withCapacity(
         4 * this.ins.length,
       );
       this.ins.forEach(txIn => bufferWriter.writeUInt32(txIn.sequence));
-      hashSequences = (0, sha256_1.sha256)(bufferWriter.end());
+      hashSequences = Uint8Array.from((0, sha256_1.sha256)(bufferWriter.end()));
     }
     if (!(isNone || isSingle)) {
       if (!this.outs.length)
@@ -390,7 +422,7 @@ class Transaction {
         bufferWriter.writeInt64(out.value);
         bufferWriter.writeVarSlice(out.script);
       });
-      hashOutputs = (0, sha256_1.sha256)(bufferWriter.end());
+      hashOutputs = Uint8Array.from((0, sha256_1.sha256)(bufferWriter.end()));
     } else if (isSingle && inIndex < this.outs.length) {
       const output = this.outs[inIndex];
       const bufferWriter = bufferutils_js_1.BufferWriter.withCapacity(
@@ -398,7 +430,7 @@ class Transaction {
       );
       bufferWriter.writeInt64(output.value);
       bufferWriter.writeVarSlice(output.script);
-      hashOutputs = (0, sha256_1.sha256)(bufferWriter.end());
+      hashOutputs = Uint8Array.from((0, sha256_1.sha256)(bufferWriter.end()));
     }
     const spendType = (leafHash ? 2 : 0) + (annex ? 1 : 0);
     // Length calculation from:
