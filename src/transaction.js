@@ -52,18 +52,46 @@ class Transaction {
     const bufferReader = new bufferutils_1.BufferReader(buffer);
     const tx = new Transaction();
     tx.version = bufferReader.readInt32();
+    // keep track of where we are before we try to read the marker
+    const markerPosition = bufferReader.offset;
+    // pull one byte that might be the segwit marker
     const marker = bufferReader.readUInt8();
+    // pull the next byte that might be the segwit flag
     const flag = bufferReader.readUInt8();
+    // we start by assuming there are no witnesses
     let hasWitnesses = false;
+    // we will fill this in only when we are sure about the number of inputs
+    let vinLen;
     if (
       marker === Transaction.ADVANCED_TRANSACTION_MARKER &&
       flag === Transaction.ADVANCED_TRANSACTION_FLAG
     ) {
-      hasWitnesses = true;
+      // read what the stream claims is the count of inputs
+      const potentialVinLen = bufferReader.readVarInt();
+      // find how many bytes are still left in the stream after that read
+      const remainingBytes = buffer.length - bufferReader.offset;
+      // each legacy input needs at least 41 bytes in the unsigned tx form
+      const minInputSize = 41;
+      if (
+        potentialVinLen === 0 ||
+        remainingBytes < potentialVinLen * minInputSize
+      ) {
+        // if the count is zero or there are not enough bytes, then this was a false alarm
+        bufferReader.offset = markerPosition;
+      } else {
+        // the marker was real, so we remember that witnesses are present
+        hasWitnesses = true;
+        // we also reuse the count we already read
+        vinLen = potentialVinLen;
+      }
     } else {
-      bufferReader.offset -= 2;
+      // marker and flag were not present, so jump back before the read
+      bufferReader.offset = markerPosition;
     }
-    const vinLen = bufferReader.readVarInt();
+    if (vinLen === undefined) {
+      // if we have not already read the input count, do it now in the normal way
+      vinLen = bufferReader.readVarInt();
+    }
     for (let i = 0; i < vinLen; ++i) {
       tx.ins.push({
         hash: bufferReader.readSlice(32),
@@ -395,10 +423,11 @@ class Transaction {
     }
     // Extra zero byte because:
     // https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki#cite_note-19
-    return bcrypto.taggedHash(
-      'TapSighash',
-      Buffer.concat([Buffer.from([0x00]), sigMsgWriter.end()]),
-    );
+    const sigMsg = sigMsgWriter.end();
+    const payload = Buffer.allocUnsafe(sigMsg.length + 1);
+    payload[0] = 0x00;
+    payload.set(sigMsg, 1);
+    return bcrypto.taggedHash('TapSighash', payload);
   }
   hashForWitnessV0(inIndex, prevOutScript, value, hashType) {
     typeforce(

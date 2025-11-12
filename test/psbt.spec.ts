@@ -29,7 +29,12 @@ const schnorrValidator = (
   pubkey: Buffer,
   msghash: Buffer,
   signature: Buffer,
-): boolean => ecc.verifySchnorr(msghash, pubkey, signature);
+): boolean =>
+  ecc.verifySchnorr(
+    Uint8Array.from(msghash),
+    Uint8Array.from(pubkey),
+    Uint8Array.from(signature),
+  );
 
 const initBuffers = (object: any): typeof preFixtures =>
   JSON.parse(JSON.stringify(object), (_, value) => {
@@ -1176,6 +1181,43 @@ describe(`Psbt`, () => {
       assert.strictEqual(psbt.getFeeRate(), f.fee);
       (psbt as any).__CACHE.__FEE_RATE = undefined;
       assert.strictEqual(psbt.getFeeRate(), f.fee);
+    });
+  });
+
+  describe('Zero input PSBTs', () => {
+    it('creates an empty PSBT with no inputs or outputs', () => {
+      const psbt = new Psbt();
+      const expectedBase64 = 'cHNidP8BAAoCAAAAAAAAAAAAAAAA';
+      assert.strictEqual(psbt.toBase64(), expectedBase64);
+
+      const specBase64 = 'cHNidP8BAAoAAAAAAAAAAAAAAA==';
+      const parsed = Psbt.fromBase64(specBase64);
+      assert.strictEqual(parsed.data.inputs.length, 0);
+      assert.strictEqual(parsed.data.outputs.length, 0);
+      assert.strictEqual(parsed.toBase64(), expectedBase64);
+    });
+
+    it('round trips PSBTs with zero inputs and one output', () => {
+      const { output } = payments.p2pkh({
+        address: '1BitcoinEaterAddressDontSendf59kuE',
+      });
+      if (!output) throw new Error('Failed to derive output script');
+
+      const psbt = new Psbt();
+      psbt.addOutput({ script: output, value: 1000 });
+
+      const expectedBase64 =
+        'cHNidP8BACwCAAAAAAHoAwAAAAAAABl2qRR1nWZ3CR6XO56dmfGcaPv0Pj8F+YisAAAAAAAAAA==';
+      assert.strictEqual(psbt.toBase64(), expectedBase64);
+
+      const parsed = Psbt.fromBase64(expectedBase64);
+      assert.strictEqual(parsed.data.inputs.length, 0);
+      assert.strictEqual(parsed.data.outputs.length, 1);
+      const unsignedTx = parsed.data.globalMap.unsignedTx as any;
+      const unsignedOutput = unsignedTx.tx.outs[0];
+      assert.strictEqual(unsignedOutput.value, 1000);
+      assert.deepStrictEqual(unsignedOutput.script, output);
+      assert.strictEqual(parsed.toBase64(), expectedBase64);
     });
   });
 
