@@ -1187,27 +1187,27 @@ describe(`Psbt`, () => {
   describe('Zero input PSBTs', () => {
     it('creates an empty PSBT with no inputs or outputs', () => {
       const psbt = new Psbt();
-      const expectedBase64 = 'cHNidP8BAAoCAAAAAAAAAAAAAAAA';
+      const expectedBase64 = 'cHNidP8BAAoCAAAAAAAAAAAAAA==';
       assert.strictEqual(psbt.toBase64(), expectedBase64);
 
-      const specBase64 = 'cHNidP8BAAoAAAAAAAAAAAAAAA==';
-      const parsed = Psbt.fromBase64(specBase64);
+      const parsed = Psbt.fromBase64(expectedBase64);
       assert.strictEqual(parsed.data.inputs.length, 0);
       assert.strictEqual(parsed.data.outputs.length, 0);
       assert.strictEqual(parsed.toBase64(), expectedBase64);
     });
 
     it('round trips PSBTs with zero inputs and one output', () => {
+      const address = '1BM1sAcrfV6d4zPKytzziu4McLQDsFC2Qc';
       const { output } = payments.p2pkh({
-        address: '1BitcoinEaterAddressDontSendf59kuE',
+        address,
       });
       if (!output) throw new Error('Failed to derive output script');
 
       const psbt = new Psbt();
-      psbt.addOutput({ script: output, value: 1000 });
+      psbt.addOutput({ address, value: 10000000000000 });
 
       const expectedBase64 =
-        'cHNidP8BACwCAAAAAAHoAwAAAAAAABl2qRR1nWZ3CR6XO56dmfGcaPv0Pj8F+YisAAAAAAAAAA==';
+        'cHNidP8BACwCAAAAAAEAoHJOGAkAABl2qRRxekyQdFd6Ba+UJxwysknSmKItmIisAAAAAAAA';
       assert.strictEqual(psbt.toBase64(), expectedBase64);
 
       const parsed = Psbt.fromBase64(expectedBase64);
@@ -1215,7 +1215,7 @@ describe(`Psbt`, () => {
       assert.strictEqual(parsed.data.outputs.length, 1);
       const unsignedTx = parsed.data.globalMap.unsignedTx as any;
       const unsignedOutput = unsignedTx.tx.outs[0];
-      assert.strictEqual(unsignedOutput.value, 1000);
+      assert.strictEqual(unsignedOutput.value, 10000000000000);
       assert.deepStrictEqual(unsignedOutput.script, output);
       assert.strictEqual(parsed.toBase64(), expectedBase64);
     });

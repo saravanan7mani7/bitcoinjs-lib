@@ -51,7 +51,7 @@
   "dependencies": {
     "@noble/hashes": "^1.2.0",
     "bech32": "^2.0.0",
-    "bip174": "^2.1.1",
+    "bip174": "git+https://github.com/saravanan7mani7/bip174.git#bip174-zero-io-fix",
     "bs58check": "^3.0.1",
     "typeforce": "^1.11.3",
     "varuint-bitcoin": "^1.1.2"

@@ -95,7 +95,7 @@
     "valid": [
       {
         "description": "PSBT with global unsigned tx and zero inputs/outputs",
-        "psbt": "cHNidP8BAAoAAAAAAAAAAAAAAA=="
+        "psbt": "cHNidP8BAAoCAAAAAAAAAAAAAA=="
       },
       {
         "description": "PSBT with zero inputs and one output",
@@ -484,7 +484,7 @@
           "hash": "Buffer.from('000102030405060708090a0b0c0d0e0f000102030405060708090a0b0c0d0e0f', 'hex')",
           "index": 2
         },
-        "equals": "cHNidP8BADMCAAAAAQABAgMEBQYHCAkKCwwNDg8AAQIDBAUGBwgJCgsMDQ4PAgAAAAD/////AAAAAAAAAAA="
+        "equals": "cHNidP8BADMCAAAAAQABAgMEBQYHCAkKCwwNDg8AAQIDBAUGBwgJCgsMDQ4PAgAAAAD/////AAAAAAAAAA=="
       },
       {
         "description": "checks for mixed taproot and non-taproot fields",
